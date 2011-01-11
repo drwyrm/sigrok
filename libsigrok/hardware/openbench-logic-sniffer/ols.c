@@ -43,8 +43,8 @@
 #endif
 
 #define NUM_PROBES			32
-#define NUM_TRIGGER_STAGES		4
-#define TRIGGER_TYPES			"01"
+#define NUM_TRIGGER_STAGES_PARALLEL	4
+#define NUM_TRIGGER_STAGES_SERIAL	32
 #define SERIAL_SPEED			B115200
 #define CLOCK_RATE			100000000
 
@@ -79,11 +79,20 @@
 #define FLAG_CLOCK_INVERTED		0x80
 #define FLAG_RLE			0x0100
 
+static int trigger_types[] = {
+	TRIGGER_TYPE_LOGIC,
+	TRIGGER_TYPE_LOGIC_FLOW,
+	TRIGGER_TYPE_SERIAL,
+	0,
+};
+
 static int capabilities[] = {
 	HWCAP_LOGIC_ANALYZER,
 	HWCAP_SAMPLERATE,
 	HWCAP_CAPTURE_RATIO,
 	HWCAP_LIMIT_SAMPLES,
+	HWCAP_PROBECONFIG,
+	HWCAP_TRIGGERCONFIG,
 	0,
 };
 
@@ -145,47 +154,59 @@ static int configure_probes(GSList *probes)
 {
 	struct probe *probe;
 	GSList *l;
-	int probe_bit, stage, i;
-	char *tc;
 
 	probe_mask = 0;
-	for (i = 0; i < NUM_TRIGGER_STAGES; i++) {
-		trigger_mask[i] = 0;
-		trigger_value[i] = 0;
-	}
-
-	num_stages = 0;
 	for (l = probes; l; l = l->next) {
 		probe = (struct probe *)l->data;
 		if (!probe->enabled)
 			continue;
-
 		/*
 		 * Set up the probe mask for later configuration into the
 		 * flag register.
 		 */
-		probe_bit = 1 << (probe->index - 1);
-		probe_mask |= probe_bit;
+		probe_mask |= 1 << (probe->index - 1);
+	}
+	return SIGROK_OK;
+}
 
-		if (!probe->trigger)
-			continue;
+static int configure_triggers(GSList *triggers)
+{
+	struct trigger *trigger;
+	GSList *l;
+	int i;
 
-		/* Configure trigger mask and value. */
-		stage = 0;
-		for (tc = probe->trigger; tc && *tc; tc++) {
-			trigger_mask[stage] |= probe_bit;
-			if (*tc == '1')
-				trigger_value[stage] |= probe_bit;
-			stage++;
-			if (stage > 3)
-				/*
-				 * TODO: Only supporting parallel mode, with
-				 * up to 4 stages.
-				 */
+	for (i = 0; i < NUM_TRIGGER_STAGES_SERIAL; i++) {
+		trigger_mask[i] = 0;
+		trigger_value[i] = 0;
+	}
+
+	for (l = triggers; l; l = l->next) {
+		trigger = (struct trigger *)l->data;
+
+		switch (trigger->type) {
+		case TRIGGER_TYPE_LOGIC:
+			num_stages = 1;
+			trigger_mask[0] = trigger->logic->value;
+			trigger_value[0] = trigger->logic->mask;
+			break;
+		case TRIGGER_TYPE_LOGIC_FLOW:
+			num_stages = trigger->logic_flow->n;
+			for (i = 0; i < num_stages; i++) {
+				trigger_value[i] =
+					*trigger->logic_flow->value[i];
+				trigger_mask[i] =
+					*trigger->logic_flow->mask[i];
+			}
+			break;
+		case TRIGGER_TYPE_SERIAL:
+			num_stages = trigger->serial->n;
+			if (num_stages > NUM_TRIGGER_STAGES_SERIAL)
 				return SIGROK_ERR;
+			return SIGROK_ERR; /* FIXME */
+		default:
+			return SIGROK_ERR;
 		}
-		if (stage > num_stages)
-			num_stages = stage;
+
 	}
 
 	return SIGROK_OK;
@@ -388,7 +409,7 @@ static void *hw_get_device_info(int device_index, int device_info_id)
 		info = &samplerates;
 		break;
 	case DI_TRIGGER_TYPES:
-		info = (char *)TRIGGER_TYPES;
+		info = &trigger_types;
 		break;
 	case DI_CUR_SAMPLERATE:
 		info = &cur_samplerate;
@@ -455,6 +476,9 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 	case HWCAP_SAMPLERATE:
 		tmp_u64 = value;
 		ret = set_configuration_samplerate(sdi, *tmp_u64);
+		break;
+	case HWCAP_TRIGGERCONFIG:
+		ret = configure_triggers((GSList *) value);
 		break;
 	case HWCAP_PROBECONFIG:
 		ret = configure_probes((GSList *) value);
