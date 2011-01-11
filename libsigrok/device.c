@@ -131,11 +131,6 @@ void device_probe_clear(struct device *device, int probenum)
 		g_free(p->name);
 		p->name = NULL;
 	}
-
-	if (p->trigger) {
-		g_free(p->trigger);
-		p->trigger = NULL;
-	}
 }
 
 void device_probe_add(struct device *device, char *name)
@@ -146,7 +141,6 @@ void device_probe_add(struct device *device, char *name)
 	p->index = g_slist_length(device->probes) + 1;
 	p->enabled = TRUE;
 	p->name = g_strdup(name);
-	p->trigger = NULL;
 	device->probes = g_slist_append(device->probes, p);
 }
 
@@ -180,33 +174,47 @@ void device_probe_name(struct device *device, int probenum, char *name)
 	p->name = g_strdup(name);
 }
 
-void device_trigger_clear(struct device *device)
+struct trigger *device_trigger_add(struct device *device, int type)
 {
-	struct probe *p;
-	unsigned int pnum;
+	struct trigger *trigger;
+	size_t s;
 
-	if (!device->probes)
-		return;
+	trigger = g_malloc0(sizeof(struct trigger));
 
-	for (pnum = 1; pnum <= g_slist_length(device->probes); pnum++) {
-		p = probe_find(device, pnum);
-		if (p && p->trigger) {
-			g_free(p->trigger);
-			p->trigger = NULL;
-		}
+	switch (type) {
+	case TRIGGER_TYPE_LOGIC:
+		s = sizeof(struct trigger_logic);
+		break;
+	case TRIGGER_TYPE_LOGIC_FLOW:
+		s = sizeof(struct trigger_logic_flow);
+		break;
+	case TRIGGER_TYPE_EDGE:
+		s = sizeof(struct trigger_edge);
+		break;
+	case TRIGGER_TYPE_WIDTH:
+		s = sizeof(struct trigger_width);
+		break;
+	case TRIGGER_TYPE_COUNT:
+		s = sizeof(struct trigger_count);
+		break;
+	case TRIGGER_TYPE_SERIAL:
+		s = sizeof(struct trigger_serial);
+		break;
+	case TRIGGER_TYPE_PROTO:
+		s = sizeof(struct trigger_proto);
+		break;
+	default:
+		goto free;
 	}
+
+	trigger->logic = g_malloc0(s);
+
+	device->triggers = g_slist_append(device->triggers, trigger);
+
+	return trigger;
+free:
+	g_free(trigger);
+	return NULL;
 }
 
-void device_trigger_set(struct device *device, int probenum, char *trigger)
-{
-	struct probe *p;
 
-	p = probe_find(device, probenum);
-	if (!p)
-		return;
-
-	if (p->trigger)
-		g_free(p->trigger);
-
-	p->trigger = g_strdup(trigger);
-}

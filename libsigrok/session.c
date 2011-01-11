@@ -172,12 +172,10 @@ void make_metadata(char *filename)
 				fprintf(f, "probe %d", probe->index);
 				if (probe->name)
 					fprintf(f, " name \"%s\"", probe->name);
-				if (probe->trigger)
-					fprintf(f, " trigger \"%s\"",
-						probe->trigger);
 				fprintf(f, "\n");
 			}
 		}
+		/* FIXME: Trigger information */
 		devcnt++;
 	}
 
