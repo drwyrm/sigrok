@@ -189,6 +189,8 @@ struct device {
 	int plugin_index;
 	/* List of struct probe* */
 	GSList *probes;
+	/* List of struct trigger* */
+	GSList *triggers;
 	/* Data acquired by this device, if any */
 	struct datastore *datastore;
 };
@@ -203,7 +205,78 @@ struct probe {
 	int type;
 	gboolean enabled;
 	char *name;
-	char *trigger;
+};
+
+enum {
+	TRIGGER_TYPE_DUMMY,
+	TRIGGER_TYPE_LOGIC,		/* Simple logic */
+	TRIGGER_TYPE_LOGIC_FLOW,	/* Multiple stages logic */
+	TRIGGER_TYPE_EDGE,		/* Single probe edge */
+	TRIGGER_TYPE_WIDTH,		/* Single probe pulse width */
+	TRIGGER_TYPE_COUNT,		/* Single probe count */
+	TRIGGER_TYPE_SERIAL,		/* Single probe serial stream */
+	TRIGGER_TYPE_PROTO,		/* Protocol analyzer */
+};
+
+enum {
+	TRIGGER_DIR_FALL,
+	TRIGGER_DIR_RISE,
+	TRIGGER_DIR_BOTH,
+};
+
+enum {
+	TRIGGER_MOL_LESS,
+	TRIGGER_MOL_MORE,
+};
+
+struct trigger_logic {
+	uint64_t value;
+	uint64_t mask;
+};
+struct trigger_logic_flow {
+	uint8_t n;
+	uint64_t **value;
+	uint64_t **mask;
+};
+struct trigger_edge {
+	struct probe *probe;
+	uint8_t direction;
+	double voltage;
+};
+struct trigger_width {
+	struct probe *probe;
+	uint8_t direction;
+	uint8_t mol;
+	uint64_t psecs;
+};
+struct trigger_count {
+	struct probe *probe;
+	uint16_t count;
+};
+struct trigger_serial {
+	struct probe *probe;
+	uint8_t n;
+	uint8_t clock_source;
+	uint64_t clock;
+	uint64_t **value;
+	uint64_t **mask;
+};
+struct trigger_proto { /* FIXME */
+	struct protocol *proto;
+};
+
+struct trigger {
+	int type;
+	int64_t psec_offset;
+	union {
+		struct trigger_logic *logic;
+		struct trigger_logic_flow *logic_flow;
+		struct trigger_edge *edge;
+		struct trigger_width *width;
+		struct trigger_count *count;
+		struct trigger_serial *serial;
+		struct trigger_proto *proto;
+	};
 };
 
 extern GSList *devices;
@@ -217,7 +290,8 @@ enum {
 	HWCAP_PAT_GENERATOR,	 /* Device provides a Pattern Generator */
 
 	HWCAP_SAMPLERATE,        /* Change samplerate */
-	HWCAP_PROBECONFIG,       /* Configure probe mask */
+	HWCAP_PROBECONFIG,       /* Configure probes */
+	HWCAP_TRIGGERCONFIG,	 /* Configure triggers */
 	HWCAP_CAPTURE_RATIO,     /* Set pre/post-trigger capture ratio */
 	HWCAP_LIMIT_MSEC,        /* Set a time limit for sample acquisition */
 	HWCAP_LIMIT_SAMPLES,     /* Set a limit on number of samples */
@@ -289,7 +363,7 @@ enum {
 	DI_NUM_PROBES,
 	/* Samplerates supported by this device, (struct samplerates) */
 	DI_SAMPLERATES,
-	/* Types of trigger supported, out of "01crf" (char *) */
+	/* Types of trigger supported (int) */
 	DI_TRIGGER_TYPES,
 	/* The currently set samplerate in Hz (uint64_t) */
 	DI_CUR_SAMPLERATE,
