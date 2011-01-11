@@ -61,10 +61,17 @@ model_t zeroplus_models[] = {
 	{0x7016, "LAP-C(162000)", 16, 2048, 200},
 };
 
+static int trigger_types[] = {
+	TRIGGER_TYPE_LOGIC,
+	TRIGGER_TYPE_LOGIC_FLOW,
+	0,
+};
+
 static int capabilities[] = {
 	HWCAP_LOGIC_ANALYZER,
 	HWCAP_SAMPLERATE,
 	HWCAP_PROBECONFIG,
+	HWCAP_TRIGGERCONFIG,
 	HWCAP_CAPTURE_RATIO,
 
 	/* These are really implemented in the driver, not the hardware. */
@@ -236,33 +243,51 @@ static int configure_probes(GSList *probes)
 {
 	struct probe *probe;
 	GSList *l;
-	int probe_bit, stage, i;
-	char *tc;
 
 	probe_mask = 0;
+	for (l = probes; l; l = l->next) {
+		probe = (struct probe *)l->data;
+		if (!probe->enabled)
+			continue;
+		probe_mask |= 1 << (probe->index - 1);
+	}
+	return SIGROK_OK;
+
+}
+
+static int configure_triggers(GSList *triggers)
+{
+	struct trigger *trigger;
+	GSList *l;
+	int i, num_stages;
+
 	for (i = 0; i < NUM_TRIGGER_STAGES; i++) {
 		trigger_mask[i] = 0;
 		trigger_value[i] = 0;
 	}
 
-	stage = -1;
-	for (l = probes; l; l = l->next) {
-		probe = (struct probe *)l->data;
-		if (probe->enabled == FALSE)
-			continue;
-		probe_bit = 1 << (probe->index - 1);
-		probe_mask |= probe_bit;
+	for (l = triggers; l; l = l->next) {
+		trigger = (struct trigger *)l->data;
 
-		if (probe->trigger) {
-			stage = 0;
-			for (tc = probe->trigger; *tc; tc++) {
-				trigger_mask[stage] |= probe_bit;
-				if (*tc == '1')
-					trigger_value[stage] |= probe_bit;
-				stage++;
-				if (stage > NUM_TRIGGER_STAGES)
-					return SIGROK_ERR;
+		switch (trigger->type) {
+		case TRIGGER_TYPE_LOGIC:
+			num_stages = 1;
+			trigger_mask[0] = trigger->logic->value;
+			trigger_value[0] = trigger->logic->mask;
+			break;
+		case TRIGGER_TYPE_LOGIC_FLOW:
+			num_stages = trigger->logic_flow->n;
+			if (num_stages > NUM_TRIGGER_STAGES)
+				return SIGROK_ERR;
+			for (i = 0; i < num_stages; i++) {
+				trigger_value[i] =
+					*trigger->logic_flow->value[i];
+				trigger_mask[i] =
+					*trigger->logic_flow->mask[i];
 			}
+			break;
+		default:
+			return SIGROK_ERR;
 		}
 	}
 
@@ -414,7 +439,7 @@ static void *hw_get_device_info(int device_index, int device_info_id)
 		info = &samplerates;
 		break;
 	case DI_TRIGGER_TYPES:
-		info = TRIGGER_TYPES;
+		info = &trigger_types;
 		break;
 	case DI_CUR_SAMPLERATE:
 		info = &cur_samplerate;
@@ -470,6 +495,8 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 		return set_configuration_samplerate(*tmp_u64);
 	case HWCAP_PROBECONFIG:
 		return configure_probes((GSList *) value);
+	case HWCAP_TRIGGERCONFIG:
+		return configure_triggers((GSList *) value);
 	case HWCAP_LIMIT_SAMPLES:
 		tmp_u64 = value;
 		limit_samples = *tmp_u64;
