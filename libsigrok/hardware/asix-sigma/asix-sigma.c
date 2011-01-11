@@ -48,7 +48,7 @@ static int cur_firmware = -1;
 static int num_probes = 0;
 static int samples_per_event = 0;
 static int capture_ratio = 50;
-static struct sigma_trigger trigger;
+static struct sigma_trigger sigma_trigger;
 static struct sigma_state sigma;
 
 static uint64_t supported_samplerates[] = {
@@ -72,11 +72,17 @@ static struct samplerates samplerates = {
 	supported_samplerates,
 };
 
+static int trigger_types[] = {
+	TRIGGER_TYPE_LOGIC,
+	TRIGGER_TYPE_EDGE,
+	0,
+};
+
 static int capabilities[] = {
 	HWCAP_LOGIC_ANALYZER,
 	HWCAP_SAMPLERATE,
 	HWCAP_CAPTURE_RATIO,
-	HWCAP_PROBECONFIG,
+	HWCAP_TRIGGERCONFIG,
 
 	HWCAP_LIMIT_MSEC,
 	0,
@@ -576,66 +582,57 @@ static int set_samplerate(struct sigrok_device_instance *sdi,
  * The Sigma supports complex triggers using boolean expressions, but this
  * has not been implemented yet.
  */
-static int configure_probes(GSList *probes)
+static int configure_triggers(GSList *triggers)
 {
-	struct probe *probe;
+	struct trigger *trigger;
 	GSList *l;
 	int trigger_set = 0;
 	int probebit;
 
-	memset(&trigger, 0, sizeof(struct sigma_trigger));
+	memset(&sigma_trigger, 0, sizeof(struct sigma_trigger));
 
-	for (l = probes; l; l = l->next) {
-		probe = (struct probe *)l->data;
-		probebit = 1 << (probe->index - 1);
+	for (l = triggers; l; l = l->next) {
+		trigger = (struct trigger *)l->data;
+		if (trigger->type != TRIGGER_TYPE_LOGIC &&
+				trigger->type != TRIGGER_TYPE_EDGE)
+			return SIGROK_ERR;
 
-		if (!probe->enabled || !probe->trigger)
-			continue;
+		if (trigger->type != TRIGGER_TYPE_EDGE &&
+					cur_samplerate >= MHZ(100)) {
+			g_warning("Asix Sigma only supports "
+				  "rising/falling trigger in 100 "
+				  "and 200 MHz mode.");
+			return SIGROK_ERR;
+		}
 
-		if (cur_samplerate >= MHZ(100)) {
-			/* Fast trigger support. */
-			if (trigger_set) {
-				g_warning("Asix Sigma only supports a single "
-						"pin trigger in 100 and 200 "
-						"MHz mode.");
+		switch (trigger->type) {
+		case TRIGGER_TYPE_EDGE:
+			probebit = 1 << (trigger->edge->probe->index - 1);
+			switch (trigger->edge->direction) {
+			case TRIGGER_DIR_FALL:
+				sigma_trigger.fallingmask |= probebit;
+				break;
+			case TRIGGER_DIR_RISE:
+				sigma_trigger.risingmask |= probebit;
+				break;
+			default: /* FIXME: Does the hardware support
+				    EDGE_BOTH? */
 				return SIGROK_ERR;
 			}
-			if (probe->trigger[0] == 'f')
-				trigger.fallingmask |= probebit;
-			else if (probe->trigger[0] == 'r')
-				trigger.risingmask |= probebit;
-			else {
-				g_warning("Asix Sigma only supports "
-					  "rising/falling trigger in 100 "
-					  "and 200 MHz mode.");
-				return SIGROK_ERR;
-			}
-
 			++trigger_set;
-		} else {
-			/* Simple trigger support (event). */
-			if (probe->trigger[0] == '1') {
-				trigger.simplevalue |= probebit;
-				trigger.simplemask |= probebit;
-			}
-			else if (probe->trigger[0] == '0') {
-				trigger.simplevalue &= ~probebit;
-				trigger.simplemask |= probebit;
-			}
-			else if (probe->trigger[0] == 'f') {
-				trigger.fallingmask |= probebit;
-				++trigger_set;
-			}
-			else if (probe->trigger[0] == 'r') {
-				trigger.risingmask |= probebit;
-				++trigger_set;
-			}
+			break;
+		case TRIGGER_TYPE_LOGIC:
+			sigma_trigger.simplevalue |= trigger->logic->value;
+			sigma_trigger.simplemask |= trigger->logic->value;
+			break;
+		default:
+			return SIGROK_ERR;
+		}
 
-			if (trigger_set > 2) {
-				g_warning("Asix Sigma only supports 2 rising/"
-					  "falling triggers.");
-				return SIGROK_ERR;
-			}
+		if (trigger_set > 2) {
+			g_warning("Asix Sigma only supports 2 rising/"
+				  "falling triggers.");
+			return SIGROK_ERR;
 		}
 	}
 
@@ -674,7 +671,7 @@ static void *hw_get_device_info(int device_index, int device_info_id)
 		info = &samplerates;
 		break;
 	case DI_TRIGGER_TYPES:
-		info = (char *)TRIGGER_TYPES;
+		info = &trigger_types;
 		break;
 	case DI_CUR_SAMPLERATE:
 		info = &cur_samplerate;
@@ -710,16 +707,14 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 
 	if (capability == HWCAP_SAMPLERATE) {
 		ret = set_samplerate(sdi, *(uint64_t*) value);
-	} else if (capability == HWCAP_PROBECONFIG) {
-		ret = configure_probes(value);
+	} else if (capability == HWCAP_TRIGGERCONFIG) {
+		ret = configure_triggers(value);
 	} else if (capability == HWCAP_LIMIT_MSEC) {
 		limit_msec = strtoull(value, NULL, 10);
 		ret = SIGROK_OK;
 	} else if (capability == HWCAP_CAPTURE_RATIO) {
 		capture_ratio = strtoull(value, NULL, 10);
 		ret = SIGROK_OK;
-	} else if (capability == HWCAP_PROBECONFIG) {
-		ret = configure_probes((GSList *) value);
 	} else {
 		ret = SIGROK_ERR;
 	}
@@ -852,7 +847,7 @@ static int decode_chunk_ts(uint8_t *buf, uint16_t *lastts,
 			 * samples to pinpoint the exact position of the trigger.
 			 */
 			tosend = get_trigger_offset(samples, *lastsample,
-						    &trigger);
+						    &sigma_trigger);
 
 			if (tosend > 0) {
 				packet.type = DF_LOGIC;
@@ -1083,12 +1078,13 @@ static int build_basic_trigger(struct triggerlut *lut)
 	lut->m4 = 0xa000;
 
 	/* Value/mask trigger support. */
-	build_lut_entry(trigger.simplevalue, trigger.simplemask, lut->m2d);
+	build_lut_entry(sigma_trigger.simplevalue, sigma_trigger.simplemask,
+			lut->m2d);
 
 	/* Rise/fall trigger support. */
 	for (i = 0, j = 0; i < 16; ++i) {
-		if (trigger.risingmask & (1 << i) ||
-		    trigger.fallingmask & (1 << i))
+		if (sigma_trigger.risingmask & (1 << i) ||
+		    sigma_trigger.fallingmask & (1 << i))
 			masks[j++] = 1 << i;
 	}
 
@@ -1098,13 +1094,13 @@ static int build_basic_trigger(struct triggerlut *lut)
 	/* Add glue logic */
 	if (masks[0] || masks[1]) {
 		/* Transition trigger. */
-		if (masks[0] & trigger.risingmask)
+		if (masks[0] & sigma_trigger.risingmask)
 			add_trigger_function(OP_RISE, FUNC_OR, 0, 0, &lut->m3);
-		if (masks[0] & trigger.fallingmask)
+		if (masks[0] & sigma_trigger.fallingmask)
 			add_trigger_function(OP_FALL, FUNC_OR, 0, 0, &lut->m3);
-		if (masks[1] & trigger.risingmask)
+		if (masks[1] & sigma_trigger.risingmask)
 			add_trigger_function(OP_RISE, FUNC_OR, 1, 0, &lut->m3);
-		if (masks[1] & trigger.fallingmask)
+		if (masks[1] & sigma_trigger.fallingmask)
 			add_trigger_function(OP_FALL, FUNC_OR, 1, 0, &lut->m3);
 	} else {
 		/* Only value/mask trigger. */
@@ -1149,7 +1145,8 @@ static int hw_start_acquisition(int device_index, gpointer session_device_id)
 
 		/* Find which pin to trigger on from mask. */
 		for (triggerpin = 0; triggerpin < 8; ++triggerpin)
-			if ((trigger.risingmask | trigger.fallingmask) &
+			if ((sigma_trigger.risingmask |
+						sigma_trigger.fallingmask) &
 			    (1 << triggerpin))
 				break;
 
@@ -1157,7 +1154,7 @@ static int hw_start_acquisition(int device_index, gpointer session_device_id)
 		triggerselect = (1 << LEDSEL1) | (triggerpin & 0x7);
 
 		/* Default rising edge. */
-		if (trigger.fallingmask)
+		if (sigma_trigger.fallingmask)
 			triggerselect |= 1 << 3;
 
 	/* All other modes. */
