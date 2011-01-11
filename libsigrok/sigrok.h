@@ -212,13 +212,18 @@ extern GSList *devices;
 /* Hardware plugin capabilities */
 enum {
 	HWCAP_DUMMY,             /* Used to terminate lists */
-	HWCAP_LOGIC_ANALYZER,
+	HWCAP_LOGIC_ANALYZER,	 /* Device provides a Logic Analyzer */
+	HWCAP_OSCILLOSCOPE,	 /* Device provides an Oscilloscope */
+	HWCAP_PAT_GENERATOR,	 /* Device provides a Pattern Generator */
+
 	HWCAP_SAMPLERATE,        /* Change samplerate */
 	HWCAP_PROBECONFIG,       /* Configure probe mask */
 	HWCAP_CAPTURE_RATIO,     /* Set pre/post-trigger capture ratio */
 	HWCAP_LIMIT_MSEC,        /* Set a time limit for sample acquisition */
 	HWCAP_LIMIT_SAMPLES,     /* Set a limit on number of samples */
-	HWCAP_CONTINUOUS,
+	HWCAP_CONTINUOUS,	 /* Device can sample continuously */
+	HWCAP_LOGIC_LEVEL,	 /* Set logic voltage level threshold */
+	HWCAP_TRIGGER_OUT,	 /* Set output trigger */
 };
 
 struct hwcap_option {
