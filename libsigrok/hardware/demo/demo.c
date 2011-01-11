@@ -186,9 +186,9 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 	if (capability == HWCAP_SAMPLERATE) {
 		cur_samplerate = *(uint64_t *) value;
 		ret = SIGROK_OK;
-	} else if (capability == HWCAP_PROBECONFIG) {
-		// ret = configure_probes((GSList *) value); FIXME
-		ret = SIGROK_OK;
+//	} else if (capability == HWCAP_PROBECONFIG) {
+//		ret = configure_probes((GSList *) value); FIXME
+//		ret = SIGROK_OK;
 	} else if (capability == HWCAP_LIMIT_SAMPLES) {
 		tmp_u64 = value;
 		limit_samples = *tmp_u64;
