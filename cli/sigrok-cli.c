@@ -610,20 +610,7 @@ void run_session(void)
 	}
 
 	if (opt_triggers) {
-		probelist = parse_triggerstring(device, opt_triggers);
-		if (!probelist) {
-			session_destroy();
-			return;
-		}
-
-		max_probes = g_slist_length(device->probes);
-		for (i = 0; i < max_probes; i++) {
-			if (probelist[i]) {
-				device_trigger_set(device, i + 1, probelist[i]);
-				g_free(probelist[i]);
-			}
-		}
-		g_free(probelist);
+		/* FIXME */
 	}
 
 	if (opt_devoption) {
