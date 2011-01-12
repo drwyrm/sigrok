@@ -209,8 +209,7 @@ struct probe {
 
 enum {
 	TRIGGER_TYPE_DUMMY,
-	TRIGGER_TYPE_LOGIC,		/* Simple logic */
-	TRIGGER_TYPE_LOGIC_FLOW,	/* Multiple stages logic */
+	TRIGGER_TYPE_LOGIC,		/* Multiple stage logic */
 	TRIGGER_TYPE_EDGE,		/* Single probe edge */
 	TRIGGER_TYPE_WIDTH,		/* Single probe pulse width */
 	TRIGGER_TYPE_COUNT,		/* Single probe count */
@@ -230,10 +229,6 @@ enum {
 };
 
 struct trigger_logic {
-	uint64_t value;
-	uint64_t mask;
-};
-struct trigger_logic_flow {
 	uint8_t n;
 	uint64_t **value;
 	uint64_t **mask;
@@ -270,7 +265,6 @@ struct trigger {
 	int64_t psec_offset;
 	union {
 		struct trigger_logic *logic;
-		struct trigger_logic_flow *logic_flow;
 		struct trigger_edge *edge;
 		struct trigger_width *width;
 		struct trigger_count *count;

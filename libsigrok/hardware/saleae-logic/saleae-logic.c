@@ -49,7 +49,6 @@
 
 static int trigger_types[] = {
 	TRIGGER_TYPE_LOGIC,
-	TRIGGER_TYPE_LOGIC_FLOW,
 	0,
 };
 
@@ -269,7 +268,6 @@ static int configure_triggers(GSList *triggers)
 	struct trigger *trigger;
 	GSList *l;
 	int i;
-	int num_stages;
 
 	for (i = 0; i < NUM_TRIGGER_STAGES; i++) {
 		trigger_mask[i] = 0;
@@ -281,19 +279,13 @@ static int configure_triggers(GSList *triggers)
 
 		switch (trigger->type) {
 		case TRIGGER_TYPE_LOGIC:
-			num_stages = 1;
-			trigger_mask[0] = trigger->logic->value;
-			trigger_value[0] = trigger->logic->mask;
-			break;
-		case TRIGGER_TYPE_LOGIC_FLOW:
-			num_stages = trigger->logic_flow->n;
-			if (num_stages > NUM_TRIGGER_STAGES)
+			if (trigger->logic->n > NUM_TRIGGER_STAGES)
 				return SIGROK_ERR;
-			for (i = 0; i < num_stages; i++) {
+			for (i = 0; i < trigger->logic->n; i++) {
 				trigger_value[i] =
-					*trigger->logic_flow->value[i];
+					*trigger->logic->value[i];
 				trigger_mask[i] =
-					*trigger->logic_flow->mask[i];
+					*trigger->logic->mask[i];
 			}
 			break;
 		default:

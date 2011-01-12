@@ -81,7 +81,6 @@
 
 static int trigger_types[] = {
 	TRIGGER_TYPE_LOGIC,
-	TRIGGER_TYPE_LOGIC_FLOW,
 	TRIGGER_TYPE_SERIAL,
 	0,
 };
@@ -185,17 +184,12 @@ static int configure_triggers(GSList *triggers)
 
 		switch (trigger->type) {
 		case TRIGGER_TYPE_LOGIC:
-			num_stages = 1;
-			trigger_mask[0] = trigger->logic->value;
-			trigger_value[0] = trigger->logic->mask;
-			break;
-		case TRIGGER_TYPE_LOGIC_FLOW:
-			num_stages = trigger->logic_flow->n;
+			num_stages = trigger->logic->n;
 			for (i = 0; i < num_stages; i++) {
 				trigger_value[i] =
-					*trigger->logic_flow->value[i];
+					*trigger->logic->value[i];
 				trigger_mask[i] =
-					*trigger->logic_flow->mask[i];
+					*trigger->logic->mask[i];
 			}
 			break;
 		case TRIGGER_TYPE_SERIAL:

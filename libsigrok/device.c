@@ -185,9 +185,6 @@ struct trigger *device_trigger_add(struct device *device, int type)
 	case TRIGGER_TYPE_LOGIC:
 		s = sizeof(struct trigger_logic);
 		break;
-	case TRIGGER_TYPE_LOGIC_FLOW:
-		s = sizeof(struct trigger_logic_flow);
-		break;
 	case TRIGGER_TYPE_EDGE:
 		s = sizeof(struct trigger_edge);
 		break;

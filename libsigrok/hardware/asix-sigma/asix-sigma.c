@@ -622,8 +622,10 @@ static int configure_triggers(GSList *triggers)
 			++trigger_set;
 			break;
 		case TRIGGER_TYPE_LOGIC:
-			sigma_trigger.simplevalue |= trigger->logic->value;
-			sigma_trigger.simplemask |= trigger->logic->value;
+			if (trigger->logic->n > 1)
+				return SIGROK_ERR;
+			sigma_trigger.simplevalue |= *trigger->logic->value[0];
+			sigma_trigger.simplemask |= *trigger->logic->value[0];
 			break;
 		default:
 			return SIGROK_ERR;
