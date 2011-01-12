@@ -246,30 +246,30 @@ static int mso_configure_trigger(struct sigrok_device_instance *sdi)
 	uint16_t dso_trigger = mso_calc_raw_from_mv(mso);
 
 	dso_trigger &= 0x3ff;
-	if ((!mso->trigger_slope && mso->trigger_chan == 1) ||
+	if ((!mso->trigger_slope && mso->trigger_chan == TRIG_CHAN_LA) ||
 			(mso->trigger_slope &&
-			 (mso->trigger_chan == 0 ||
-			  mso->trigger_chan == 2 ||
-			  mso->trigger_chan == 3)))
+			 (mso->trigger_chan == TRIG_CHAN_DSO ||
+			  mso->trigger_chan == TRIG_CHAN_DSO_GE ||
+			  mso->trigger_chan == TRIG_CHAN_DSO_LT)))
 		dso_trigger |= 0x400;
 
 	switch (mso->trigger_chan) {
-	case 1:
+	case TRIG_CHAN_LA:
 		dso_trigger |= 0xe000;
-	case 2:
+	case TRIG_CHAN_DSO_GE:
 		dso_trigger |= 0x4000;
 		break;
-	case 3:
+	case TRIG_CHAN_DSO_LT:
 		dso_trigger |= 0x2000;
 		break;
-	case 4:
+	case TRIG_CHAN_SER_I2C:
 		dso_trigger |= 0xa000;
 		break;
-	case 5:
+	case TRIG_CHAN_SER_SPI:
 		dso_trigger |= 0x8000;
 		break;
 	default:
-	case 0:
+	case TRIG_CHAN_DSO:
 		break;
 	}
 
@@ -291,7 +291,8 @@ static int mso_configure_trigger(struct sigrok_device_instance *sdi)
 	ops[2] = mso_trans(3, dso_trigger & 0xff);
 	ops[3] = mso_trans(4, (dso_trigger >> 8) & 0xff);
 	ops[4] = mso_trans(11,
-			mso->dso_trigger_width / HZ_TO_NS(mso->cur_rate));
+			(mso->dso_trigger_width / 1000)
+			/ HZ_TO_NS(mso->cur_rate));
 	ops[5] = mso_trans(15, (2 | mso->slowmode));
 
 	/* FIXME SPI/I2C Triggers */
@@ -376,15 +377,14 @@ static int configure_triggers(struct sigrok_device_instance *sdi,
 	struct mso *mso = sdi->priv;
 	GSList *l;
 	int trigger_set = 0;
-	int probebit;
 	int i;
 
 	g_warning("entered configure_triggers");
 
 	for (l = triggers; l; l = l->next) {
-//		if (trigger_set) /* we support only 1 trigger */
-//			return SIGROK_ERR;
-		
+		if (trigger_set) /* we support only 1 trigger */
+			return SIGROK_ERR;
+
 		trigger = (struct trigger *)l->data;
 		/*
 	uint8_t trigger_chan;
@@ -400,9 +400,9 @@ static int configure_triggers(struct sigrok_device_instance *sdi,
 
 		switch (trigger->type) {
 		case TRIGGER_TYPE_LOGIC:
-//			if (trigger->logic->n > 1)
-//				return SIGROK_ERR;
-//			mso->trigger_chan = ???;
+			if (trigger->logic->n > 1)
+				return SIGROK_ERR;
+			mso->trigger_chan = TRIG_CHAN_LA;
 			mso->la_trigger = trigger->logic->value[0];
 			mso->la_trigger_mask = trigger->logic->mask[0];
 			for (i = 0; i < trigger->logic->n; i++)
@@ -410,19 +410,39 @@ static int configure_triggers(struct sigrok_device_instance *sdi,
 					(unsigned int) trigger->logic->value[i],
 					(unsigned int) trigger->logic->mask[i]);
 			break;
+
 		case TRIGGER_TYPE_EDGE:
+			/* Only supported on analog probe */
+			/* FIXME: Analog probe isnt supported by sigrok yet,
+			 * so, we can't check if its a valid probe.
+			 */
 			g_warning("edge: %d %d %f",
 					trigger->edge->probe->index,
 					trigger->edge->direction,
 					trigger->edge->voltage);
-//			mso->trigger_chan = ???;
+			mso->trigger_chan = TRIG_CHAN_DSO;
+			if (trigger->edge->direction == TRIGGER_DIR_RISE)
+				mso->trigger_slope = 0;
+			else if (trigger->edge->direction == TRIGGER_DIR_FALL)
+				mso->trigger_slope = 1;
+			mso->dso_trigger_voltage = trigger->edge->voltage;
 			break;
 		case TRIGGER_TYPE_WIDTH:
-//			mso->trigger_chan = ???;
+			if (trigger->width->mol == TRIGGER_MOL_MORE)
+				mso->trigger_chan = TRIG_CHAN_DSO_GE;
+			else if (trigger->width->mol == TRIGGER_MOL_LESS)
+				mso->trigger_chan = TRIG_CHAN_DSO_LT;
+			else
+				return SIGROK_ERR;
+			if (trigger->width->direction == TRIGGER_DIR_RISE)
+				mso->trigger_slope = 0;
+			else if (trigger->width->direction == TRIGGER_DIR_FALL)
+				mso->trigger_slope = 1;
+			mso->dso_trigger_voltage = trigger->width->voltage;
+			mso->dso_trigger_width = trigger->width->psecs;
 			break;
 		case TRIGGER_TYPE_COUNT:
 //			mso->trigger_chan = ???;
-			break;
 		case TRIGGER_TYPE_PROTO: /* FIXME */
 		default:
 			return SIGROK_ERR;
@@ -681,7 +701,7 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 
 }
 
-#define MSO_TRIGGER_UNKNOWN	'!'
+#define MSO_TRIGGER_STANDBY	'!'
 #define MSO_TRIGGER_UNKNOWN1	'1'
 #define MSO_TRIGGER_UNKNOWN2	'2'
 #define MSO_TRIGGER_UNKNOWN3	'3'

@@ -76,6 +76,13 @@ const char mso_foot[] = { 0x7e };
 #define BIT_CTL_RESETADC	(1 << 6)
 #define BIT_CTL_LED		(1 << 7)
 
+#define TRIG_CHAN_DSO		0
+#define TRIG_CHAN_LA		1
+#define TRIG_CHAN_DSO_GE	2
+#define TRIG_CHAN_DSO_LT	3
+#define TRIG_CHAN_SER_I2C	4
+#define TRIG_CHAN_SER_SPI	5
+
 struct rate_map {
 	uint32_t rate;
 	uint16_t val;
