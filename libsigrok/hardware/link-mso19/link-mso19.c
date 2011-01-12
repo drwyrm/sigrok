@@ -55,6 +55,15 @@ static struct samplerates samplerates = {
 	100, MHZ(200), 0, supported_samplerates,
 };
 
+static int trigger_types[] = {
+	TRIGGER_TYPE_LOGIC,
+	TRIGGER_TYPE_EDGE,
+	TRIGGER_TYPE_WIDTH,
+	TRIGGER_TYPE_COUNT,
+	TRIGGER_TYPE_PROTO,
+	0,
+};
+
 static GSList *device_instances = NULL;
 
 static int mso_send_control_message(struct sigrok_device_instance *sdi,
@@ -223,7 +232,6 @@ static int mso_configure_rate(struct sigrok_device_instance *sdi,
 	return ret;
 }
 
-
 static inline uint16_t mso_calc_raw_from_mv(struct mso *mso)
 {
 	return (uint16_t) (0x200 -
@@ -343,6 +351,85 @@ static int mso_parse_serial(const char *iSerial, const char *iProduct,
 	 * bigger iSerial strings, but as I can't test on my device
 	 * I will not implement it yet
 	 */
+
+	return SIGROK_OK;
+}
+
+static int configure_rate(struct sigrok_device_instance *sdi, uint32_t rate)
+{
+	struct mso *mso = sdi->priv;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(rate_map); i++) {
+		if (rate_map[i].rate == rate) {
+			mso->cur_rate = rate;
+			return SIGROK_OK;
+		}
+	}
+	return SIGROK_ERR;
+}
+
+static int configure_triggers(struct sigrok_device_instance *sdi,
+		GSList *triggers)
+{
+	struct trigger *trigger;
+	struct mso *mso = sdi->priv;
+	GSList *l;
+	int trigger_set = 0;
+	int probebit;
+	int i;
+
+	g_warning("entered configure_triggers");
+
+	for (l = triggers; l; l = l->next) {
+//		if (trigger_set) /* we support only 1 trigger */
+//			return SIGROK_ERR;
+		
+		trigger = (struct trigger *)l->data;
+		/*
+	uint8_t trigger_chan;
+	uint8_t trigger_slope;
+	uint8_t trigger_spimode;
+	uint8_t trigger_outsrc;
+	uint8_t trigger_state;
+	uint8_t la_trigger;
+	uint8_t la_trigger_mask;
+	double dso_trigger_voltage;
+	uint16_t dso_trigger_width;
+		*/
+
+		switch (trigger->type) {
+		case TRIGGER_TYPE_LOGIC:
+//			if (trigger->logic->n > 1)
+//				return SIGROK_ERR;
+//			mso->trigger_chan = ???;
+			mso->la_trigger = trigger->logic->value[0];
+			mso->la_trigger_mask = trigger->logic->mask[0];
+			for (i = 0; i < trigger->logic->n; i++)
+				g_warning("logic: %2x %2x",
+					(unsigned int) trigger->logic->value[i],
+					(unsigned int) trigger->logic->mask[i]);
+			break;
+		case TRIGGER_TYPE_EDGE:
+			g_warning("edge: %d %d %f",
+					trigger->edge->probe->index,
+					trigger->edge->direction,
+					trigger->edge->voltage);
+//			mso->trigger_chan = ???;
+			break;
+		case TRIGGER_TYPE_WIDTH:
+//			mso->trigger_chan = ???;
+			break;
+		case TRIGGER_TYPE_COUNT:
+//			mso->trigger_chan = ???;
+			break;
+		case TRIGGER_TYPE_PROTO: /* FIXME */
+		default:
+			return SIGROK_ERR;
+		}
+
+		trigger_set++;
+	}
 
 	return SIGROK_OK;
 }
@@ -549,7 +636,7 @@ static void *hw_get_device_info(int device_index, int device_info_id)
 		info = &samplerates;
 		break;
 	case DI_TRIGGER_TYPES:
-		info = "01"; /* FIXME */
+		info = &trigger_types;
 		break;
 	case DI_CUR_SAMPLERATE:
 		info = &mso->cur_rate;
@@ -582,8 +669,11 @@ static int hw_set_configuration(int device_index, int capability, void *value)
 
 	switch (capability) {
 	case HWCAP_SAMPLERATE:
-		return mso_configure_rate(sdi, *(uint64_t *) value);
-	case HWCAP_PROBECONFIG:
+		return configure_rate(sdi, *(uint64_t *) value);
+	case HWCAP_TRIGGERCONFIG:
+		return configure_triggers(sdi, value);
+//	case HWCAP_PROBECONFIG:
+//		return configure_probes(sdi, value);
 	case HWCAP_LIMIT_SAMPLES:
 	default:
 		return SIGROK_OK; /* FIXME */
