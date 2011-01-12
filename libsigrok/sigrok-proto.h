@@ -53,8 +53,7 @@ void device_probe_add(struct device *device, char *name);
 struct probe *probe_find(struct device *device, int probenum);
 void device_probe_name(struct device *device, int probenum, char *name);
 
-void device_trigger_clear(struct device *device);
-void device_trigger_set(struct device *device, int probenum, char *trigger);
+struct trigger *device_trigger_add(struct device *device, int type, unsigned int list_len);
 
 int load_hwplugins(void);
 GSList *list_hwplugins(void);

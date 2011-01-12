@@ -174,7 +174,8 @@ void device_probe_name(struct device *device, int probenum, char *name)
 	p->name = g_strdup(name);
 }
 
-struct trigger *device_trigger_add(struct device *device, int type)
+struct trigger *device_trigger_add(struct device *device,
+		int type, unsigned int list_len)
 {
 	struct trigger *trigger;
 	size_t s;
@@ -203,8 +204,15 @@ struct trigger *device_trigger_add(struct device *device, int type)
 	default:
 		goto free;
 	}
-
 	trigger->logic = g_malloc0(s);
+
+	trigger->type = type;
+
+	/* Logic needs extra space for multi stage lists */
+	if (type == TRIGGER_TYPE_LOGIC) {
+		trigger->logic->value = g_malloc0(sizeof(uint64_t) * list_len);
+		trigger->logic->mask = g_malloc0(sizeof(uint64_t) * list_len);
+	}
 
 	device->triggers = g_slist_append(device->triggers, trigger);
 

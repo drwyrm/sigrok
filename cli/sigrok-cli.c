@@ -528,6 +528,187 @@ int num_real_devices(void)
 	return num_devices;
 }
 
+static int str_to_triggertype(char *str)
+{
+	if (!strcasecmp(str, "logic"))
+		return TRIGGER_TYPE_LOGIC;
+	if (!strcasecmp(str, "edge"))
+		return TRIGGER_TYPE_EDGE;
+	if (!strcasecmp(str, "width"))
+		return TRIGGER_TYPE_WIDTH;
+	if (!strcasecmp(str, "count"))
+		return TRIGGER_TYPE_COUNT;
+	if (!strcasecmp(str, "serial"))
+		return TRIGGER_TYPE_SERIAL;
+	if (!strcasecmp(str, "proto"))
+		return TRIGGER_TYPE_PROTO;
+	return SIGROK_ERR;
+}
+
+static int str_to_triggerdirection(char *str)
+{
+	if (!strcasecmp(str, "rise"))
+		return TRIGGER_DIR_RISE;
+	if (!strcasecmp(str, "fall"))
+		return TRIGGER_DIR_FALL;
+	if (!strcasecmp(str, "both"))
+		return TRIGGER_DIR_BOTH;
+	return SIGROK_ERR;
+}
+
+static int str_to_triggermol(char *str)
+{
+	if (!strcasecmp(str, "more"))
+		return TRIGGER_MOL_MORE;
+	if (!strcasecmp(str, "less"))
+		return TRIGGER_MOL_LESS;
+	return SIGROK_ERR;
+}
+
+#define BITMAP_SIZE		64 /* bits */
+#define MAX_TRIGGERS		8
+#define MAX_TRIGGER_ARGS	32
+
+static int str_to_bitmap(uint64_t *value, uint64_t *mask, char *str)
+{
+	uint8_t bitpos;
+	size_t s = strlen(str);
+
+	if (s > BITMAP_SIZE)
+		return SIGROK_ERR;
+
+	for (bitpos = 0; bitpos < s; bitpos++) {
+		switch (str[bitpos]) {
+		case '1':
+			*value |= (1 << bitpos);
+			*mask |= (1 << bitpos);
+			break;
+		case '0':
+			*value &= ~(1 << bitpos);
+			*mask |= (1 << bitpos);
+			break;
+		case 'X':
+		case 'x':
+			*mask &= ~(1 << bitpos);
+			break;
+		default:
+			return SIGROK_ERR;
+		}
+	}
+//	printf("value:%x mask:%x\n", (unsigned int) *value,
+//			(unsigned int) *mask);
+	return SIGROK_OK;
+}
+
+static int handle_triggerstring(struct device *device, char *string)
+{
+	int i, trigger_type;
+	char **triggers, **tokens, **arg;
+	struct trigger *t;
+	unsigned int numargs, n;
+	int ret = SIGROK_ERR;
+
+//	triggerlist = g_malloc0(MAX_TRIGGERS * sizeof(struct trigger *));
+	triggers = g_strsplit(string, " ", MAX_TRIGGERS);
+//	trigger_types = device->plugin->get_device_info(0, DI_TRIGGER_TYPES);
+//	if (trigger_types == NULL)
+//		return SIGROK_ERR;
+
+	for (i = 0; triggers[i]; i++) {
+		tokens = g_strsplit(triggers[i], "=", 2);
+		if (!tokens[0] || !tokens[1])
+			return ret;
+
+		trigger_type = str_to_triggertype(tokens[0]);
+		arg = g_strsplit(tokens[1], ":", MAX_TRIGGER_ARGS);
+		numargs = g_strv_length(arg);
+		t = device_trigger_add(device, trigger_type, numargs);
+
+		switch (trigger_type) {
+		case TRIGGER_TYPE_LOGIC:
+			t->logic->n = numargs;
+			for (n = 0; n < numargs; n++) {
+				t->logic->value[n] = 0;
+				t->logic->mask[n] = 0;
+				ret = str_to_bitmap(
+					&t->logic->value[n],
+					&t->logic->mask[n],
+					arg[n]);
+				if (ret != SIGROK_OK)
+					return ret;
+			}
+			break;
+		case TRIGGER_TYPE_EDGE:
+			t->edge->probe = probe_find(device, atoi(arg[0]));
+			t->edge->direction = str_to_triggerdirection(arg[1]);
+			t->edge->voltage = strtod(arg[2], NULL);
+			break;
+		case TRIGGER_TYPE_WIDTH:
+			t->width->probe = probe_find(device, atoi(arg[0]));
+			t->width->direction = str_to_triggerdirection(arg[1]);
+			t->width->mol = str_to_triggermol(arg[2]);
+			t->width->psecs = strtoul(arg[3], NULL, 10);
+			t->width->voltage = strtod(arg[4], NULL);
+		case TRIGGER_TYPE_COUNT:
+			t->count->probe = probe_find(device, atoi(arg[0]));
+			t->count->count = atoi(arg[1]);
+			t->count->voltage = strtod(arg[2], NULL);
+
+		/* FIXME: Implement other trigger types */
+		case TRIGGER_TYPE_SERIAL:
+		case TRIGGER_TYPE_PROTO:
+			return SIGROK_ERR;
+		}
+	}
+
+/*	for (i = 0; tokens[i]; i++) {
+		if (tokens[i][0] < '0' || tokens[i][0] > '9') {
+			probenum = 0;
+			for (l = device->probes; l; l = l->next) {
+				probe = (struct probe *)l->data;
+				if (probe->enabled
+				    && !strncmp(probe->name, tokens[i],
+						strlen(probe->name))) {
+					probenum = probe->index;
+					break;
+				}
+			}
+		} else {
+			probenum = strtol(tokens[i], NULL, 10);
+		}
+
+		if (probenum < 1 || probenum > max_probes) {
+			printf("Invalid probe.\n");
+			error = TRUE;
+			break;
+		}
+
+		if ((trigger = strchr(tokens[i], '='))) {
+			for (tc = ++trigger; *tc; tc++) {
+				if (strchr(trigger_types, *tc) == NULL) {
+					printf("Unsupported trigger type "
+					       "'%c'\n", *tc);
+					error = TRUE;
+					break;
+				}
+			}
+			if (!error)
+				triggerlist[probenum - 1] = g_strdup(trigger);
+		}
+	}
+	g_strfreev(tokens);
+
+	if (error) {
+		for (i = 0; i < max_probes; i++)
+			if (triggerlist[i])
+				g_free(triggerlist[i]);
+		g_free(triggerlist);
+		triggerlist = NULL;
+	}
+*/
+	return SIGROK_OK;
+}
+
 void run_session(void)
 {
 	struct device *device;
@@ -610,7 +791,8 @@ void run_session(void)
 	}
 
 	if (opt_triggers) {
-		/* FIXME */
+		handle_triggerstring(device, opt_triggers);
+//		exit(1);
 	}
 
 	if (opt_devoption) {
@@ -689,6 +871,13 @@ void run_session(void)
 	if (device->plugin->set_configuration(device->plugin_index,
 		  HWCAP_PROBECONFIG, (char *)device->probes) != SIGROK_OK) {
 		printf("Failed to configure probes.\n");
+		session_destroy();
+		return;
+	}
+
+	if (device->plugin->set_configuration(device->plugin_index,
+		 HWCAP_TRIGGERCONFIG, (char *)device->triggers) != SIGROK_OK) {
+		printf("Failed to configure triggers.\n");
 		session_destroy();
 		return;
 	}
