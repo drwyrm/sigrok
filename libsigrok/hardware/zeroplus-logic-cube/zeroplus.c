@@ -274,9 +274,9 @@ static int configure_triggers(GSList *triggers)
 				return SIGROK_ERR;
 			for (i = 0; i < trigger->logic->n; i++) {
 				trigger_value[i] =
-					*trigger->logic->value[i];
+					trigger->logic->value[i];
 				trigger_mask[i] =
-					*trigger->logic->mask[i];
+					trigger->logic->mask[i];
 			}
 			break;
 		default:

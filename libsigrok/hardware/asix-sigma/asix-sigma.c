@@ -35,7 +35,6 @@
 #define USB_VENDOR_NAME			"ASIX"
 #define USB_MODEL_NAME			"SIGMA"
 #define USB_MODEL_VERSION		""
-#define TRIGGER_TYPES			"rf10"
 
 static GSList *device_instances = NULL;
 
@@ -624,8 +623,8 @@ static int configure_triggers(GSList *triggers)
 		case TRIGGER_TYPE_LOGIC:
 			if (trigger->logic->n > 1)
 				return SIGROK_ERR;
-			sigma_trigger.simplevalue |= *trigger->logic->value[0];
-			sigma_trigger.simplemask |= *trigger->logic->value[0];
+			sigma_trigger.simplevalue |= trigger->logic->value[0];
+			sigma_trigger.simplemask |= trigger->logic->value[0];
 			break;
 		default:
 			return SIGROK_ERR;

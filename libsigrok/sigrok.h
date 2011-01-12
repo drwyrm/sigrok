@@ -230,8 +230,8 @@ enum {
 
 struct trigger_logic {
 	uint8_t n;
-	uint64_t **value;
-	uint64_t **mask;
+	uint64_t *value;
+	uint64_t *mask;
 };
 struct trigger_edge {
 	struct probe *probe;
@@ -255,8 +255,8 @@ struct trigger_serial {
 	uint8_t n;
 	uint8_t clock_source;
 	uint64_t clock;
-	uint64_t **value;
-	uint64_t **mask;
+	uint64_t value;
+	uint64_t mask;
 };
 struct trigger_proto { /* FIXME */
 	struct protocol *proto;

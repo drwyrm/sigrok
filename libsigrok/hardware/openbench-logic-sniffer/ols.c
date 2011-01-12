@@ -187,9 +187,9 @@ static int configure_triggers(GSList *triggers)
 			num_stages = trigger->logic->n;
 			for (i = 0; i < num_stages; i++) {
 				trigger_value[i] =
-					*trigger->logic->value[i];
+					trigger->logic->value[i];
 				trigger_mask[i] =
-					*trigger->logic->mask[i];
+					trigger->logic->mask[i];
 			}
 			break;
 		case TRIGGER_TYPE_SERIAL:
