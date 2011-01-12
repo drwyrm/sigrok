@@ -243,10 +243,12 @@ struct trigger_width {
 	uint8_t direction;
 	uint8_t mol;
 	uint64_t psecs;
+	double voltage;
 };
 struct trigger_count {
 	struct probe *probe;
 	uint16_t count;
+	double voltage;
 };
 struct trigger_serial {
 	struct probe *probe;
