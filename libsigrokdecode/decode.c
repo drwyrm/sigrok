@@ -21,6 +21,7 @@
 #include <sigrokdecode.h> /* First, so we avoid a _POSIX_C_SOURCE warning. */
 #include <stdio.h>
 #include <string.h>
+#include <dirent.h>
 
 /* Re-define some string functions for Python >= 3.0. */
 #if PY_VERSION_HEX >= 0x03000000
@@ -29,6 +30,9 @@
 #define PyString_Check PyBytes_Check
 #endif
 
+/* The list of protocol decoders. */
+GSList *list_pds = NULL;
+
 /**
  * Initialize libsigrokdecode.
  *
@@ -36,20 +40,44 @@
  */
 int sigrokdecode_init(void)
 {
+	DIR *dir;
+	struct dirent *dp;
+	char *tmp;
+
 	/* Py_Initialize() returns void and usually cannot fail. */
 	Py_Initialize();
 
-	/* Add some more search directories for convenience. */
+	/* Add search directory for the protocol decoders. */
 	/* FIXME: Check error code. */
 	/* FIXME: What happens if this function is called multiple times? */
-	PyRun_SimpleString(
-		"import sys;"
-		"sys.path.append('libsigrokdecode/decoders');"
-		"sys.path.append('../libsigrokdecode/decoders');"
-		"sys.path.append('/usr/local/share/sigrok');"
-		);
+	PyRun_SimpleString("import sys;"
+			   "sys.path.append('" DECODERS_DIR "');");
+
+	if (!(dir = opendir(DECODERS_DIR)))
+		return SIGROKDECODE_ERR_DECODERS_DIR;
+
+	while ((dp = readdir(dir)) != NULL) {
+		if (!g_str_has_suffix(dp->d_name, ".py"))
+			continue;
+		/* For now use the filename (without .py) as decoder name. */
+		if ((tmp = g_strndup(dp->d_name, strlen(dp->d_name) - 3)))
+			list_pds = g_slist_append(list_pds, tmp);
+	}
+	closedir(dir);
 
 	return SIGROKDECODE_OK;
+}
+
+/**
+ * Returns the list of supported/loaded protocol decoders.
+ *
+ * This is a GSList containing the names of the decoders as strings.
+ *
+ * @return List of decoders, NULL if none are supported or loaded.
+ */
+GSList *sigrokdecode_list_decoders(void)
+{
+	return list_pds;
 }
 
 /**

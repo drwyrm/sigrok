@@ -47,6 +47,7 @@
 #define SIGROKDECODE_ERR_MALLOC		-2 /* Malloc/calloc/realloc error */
 #define SIGROKDECODE_ERR_ARGS		-3 /* Function argument error */
 #define SIGROKDECODE_ERR_PYTHON		-4 /* Python C API error */
+#define SIGROKDECODE_ERR_DECODERS_DIR	-5 /* Protocol decoder path invalid */
 
 /* TODO: Documentation. */
 struct sigrokdecode_decoder {
@@ -62,6 +63,7 @@ struct sigrokdecode_decoder {
 };
 
 int sigrokdecode_init(void);
+GSList *sigrokdecode_list_decoders(void);
 int sigrokdecode_load_decoder(const char *name, struct sigrokdecode_decoder **dec);
 int sigrokdecode_run_decoder(struct sigrokdecode_decoder *dec,
 			     uint8_t *inbuf, uint64_t inbuflen,
